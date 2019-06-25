@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/k0kubun/pp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
@@ -65,19 +66,18 @@ var rootCmd *cobra.Command = &cobra.Command{
 		if !contains(viper.SupportedExts, opts.From) {
 			log.Fatalf("error: unsupported input: %s\n", opts.From)
 		}
-		if !contains(viper.SupportedExts, opts.To) {
-			log.Fatalf("error: unsupported output: %s\n", opts.To)
-		}
 		v.SetConfigType(opts.From)
 
 		// set dumper
 		switch opts.To {
 		case "json":
 			dumper = jsonMarshaller
-		case "yaml":
+		case "yaml", "yml":
 			dumper = yaml.Marshal
 		case "toml":
 			dumper = tomlMarshaller
+		case "go":
+			dumper = prettyGoMarshaller
 		default:
 			log.Fatalf("error: datix could not find marshaller for: %s\n", opts.To)
 		}
@@ -159,8 +159,14 @@ func jsonMarshaller(value interface{}) ([]byte, error) {
 	return w.Bytes(), err
 }
 
+func prettyGoMarshaller(value interface{}) ([]byte, error) {
+	s := pp.Sprint(value)
+	return []byte(s), nil
+}
+
 func setup() {
 	log.SetPrefix("[vmap] ")
+	pp.ColoringEnabled = false
 
 	v = viper.New()
 	opts = options{}
