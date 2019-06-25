@@ -44,8 +44,20 @@ var rootCmd *cobra.Command = &cobra.Command{
 			os.Exit(0)
 		}
 
+		var absPath string
+
 		opts.From = strings.TrimSpace(strings.ToLower(opts.From))
 		opts.To = strings.TrimSpace(strings.ToLower(opts.To))
+
+		isGuess := opts.From == "" || opts.From == "guess"
+		if isGuess && opts.Input != "" && !opts.Scan {
+			absPath, _ = filepath.Abs(opts.Input)
+			ext := filepath.Ext(absPath)
+			ext = strings.TrimPrefix(ext, ".")
+			opts.From = strings.ToLower(ext)
+		} else if isGuess && opts.Scan {
+			opts.From = "json"
+		}
 
 		// initialize from options
 		if !contains(viper.SupportedExts, opts.From) {
@@ -146,7 +158,7 @@ func jsonMarshaller(value interface{}) ([]byte, error) {
 }
 
 func setup() {
-	log.SetPrefix("DATIX ")
+	log.SetPrefix("[vmap] ")
 
 	v = viper.New()
 	opts = options{}
@@ -154,8 +166,8 @@ func setup() {
 	rootCmd.PersistentFlags().BoolVar(&opts.ListFormats, "list-formats", false, "list available input format")
 	rootCmd.PersistentFlags().BoolVarP(&opts.EscapeHTML, "escape-html", "E", false, "escape html on json output")
 	rootCmd.PersistentFlags().StringVarP(&opts.Input, "input", "i", "", "input file path")
-	rootCmd.PersistentFlags().StringVarP(&opts.From, "from", "f", "json", "input data format")
-	rootCmd.PersistentFlags().StringVarP(&opts.To, "to", "t", "json", "output data format")
+	rootCmd.PersistentFlags().StringVarP(&opts.From, "from", "f", "guess", "input data format")
+	rootCmd.PersistentFlags().StringVarP(&opts.To, "to", "t", "toml", "output data format")
 	rootCmd.PersistentFlags().BoolVarP(&opts.Scan, "read-stdin", "S", false, "read from stdin")
 	rootCmd.PersistentFlags().IntVarP(&opts.Indent, "indent", "n", 4, "indents for json output")
 }
