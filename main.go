@@ -79,7 +79,8 @@ var rootCmd *cobra.Command = &cobra.Command{
 		case "go":
 			dumper = prettyGoMarshaller
 		default:
-			log.Fatalf("error: datix could not find marshaller for: %s\n", opts.To)
+			log.Printf("error: could not find marshaller for: %s\n", opts.To)
+			log.Fatalf("try one of: %v\n", []string{"go", "json", "yaml", "toml"})
 		}
 
 		if opts.Scan {
