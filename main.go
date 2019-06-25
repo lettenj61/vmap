@@ -50,13 +50,15 @@ var rootCmd *cobra.Command = &cobra.Command{
 		opts.To = strings.TrimSpace(strings.ToLower(opts.To))
 
 		isGuess := opts.From == "" || opts.From == "guess"
-		if isGuess && opts.Input != "" && !opts.Scan {
-			absPath, _ = filepath.Abs(opts.Input)
-			ext := filepath.Ext(absPath)
-			ext = strings.TrimPrefix(ext, ".")
-			opts.From = strings.ToLower(ext)
-		} else if isGuess && opts.Scan {
-			opts.From = "json"
+		if isGuess {
+			if opts.Input != "" && !opts.Scan {
+				absPath, _ = filepath.Abs(opts.Input)
+				ext := filepath.Ext(absPath)
+				ext = strings.TrimPrefix(ext, ".")
+				opts.From = strings.ToLower(ext)
+			} else {
+				opts.From = "json"
+			}
 		}
 
 		// initialize from options
