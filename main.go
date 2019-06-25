@@ -17,12 +17,13 @@ import (
 )
 
 type options struct {
-	EscapeHTML bool
-	Input      string
-	From       string
-	To         string
-	Scan       bool
-	Indent     int
+	EscapeHTML  bool
+	Input       string
+	ListFormats bool
+	From        string
+	To          string
+	Scan        bool
+	Indent      int
 }
 
 var opts options
@@ -35,6 +36,13 @@ var rootCmd *cobra.Command = &cobra.Command{
 	Short:   "convert one data format to another",
 	Long:    "",
 	Run: func(cmd *cobra.Command, args []string) {
+
+		// help utilities (not main function)
+		if opts.ListFormats {
+			list := strings.Join(viper.SupportedExts, ", ")
+			fmt.Printf("%s\n", list)
+			os.Exit(0)
+		}
 
 		opts.From = strings.TrimSpace(strings.ToLower(opts.From))
 		opts.To = strings.TrimSpace(strings.ToLower(opts.To))
@@ -143,6 +151,7 @@ func setup() {
 	v = viper.New()
 	opts = options{}
 
+	rootCmd.PersistentFlags().BoolVar(&opts.ListFormats, "list-formats", false, "list available input format")
 	rootCmd.PersistentFlags().BoolVarP(&opts.EscapeHTML, "escape-html", "E", false, "escape html on json output")
 	rootCmd.PersistentFlags().StringVarP(&opts.Input, "input", "i", "", "input file path")
 	rootCmd.PersistentFlags().StringVarP(&opts.From, "from", "f", "json", "input data format")
