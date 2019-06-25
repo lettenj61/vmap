@@ -30,9 +30,10 @@ var v *viper.Viper
 var dumper func(value interface{}) ([]byte, error)
 
 var rootCmd *cobra.Command = &cobra.Command{
-	Use:   "vmap",
-	Short: "convert one data format to another",
-	Long:  "",
+	Use:     "vmap",
+	Version: "0.1.0",
+	Short:   "convert one data format to another",
+	Long:    "",
 	Run: func(cmd *cobra.Command, args []string) {
 
 		opts.From = strings.TrimSpace(strings.ToLower(opts.From))
