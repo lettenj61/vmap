@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,9 +38,8 @@ var dumper func(value interface{}) ([]byte, error)
 
 var rootCmd *cobra.Command = &cobra.Command{
 	Use:     "vmap",
-	Version: "0.1.0",
+	Version: "0.1.1",
 	Short:   "convert one data format to another",
-	Long:    "",
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// help utilities (not main function)
@@ -67,11 +67,61 @@ var rootCmd *cobra.Command = &cobra.Command{
 			log.Fatalf("try one of: %v\n", []string{"go", "json", "yaml", "toml"})
 		}
 
-		if opts.From == "csv" {
-			log.Fatalln("error: not implemented!")
-		} else {
-			processConfig()
+		// configure input format
+		var absPath string
+		isGuess := opts.From == "" || opts.From == "guess"
+		if opts.IsArray {
+			opts.From = "json"
+		} else if isGuess {
+			if opts.Input != "" && !opts.Scan {
+				absPath, _ = filepath.Abs(opts.Input)
+				ext := filepath.Ext(absPath)
+				ext = strings.TrimPrefix(ext, ".")
+				opts.From = strings.ToLower(ext)
+			} else {
+				opts.From = "json"
+			}
 		}
+
+		if opts.From == "csv" {
+			loadData(func(r io.Reader) {
+				d := csv.NewReader(r)
+				d.TrimLeadingSpace = true
+				d.TrailingComma = true
+				if records, err := d.ReadAll(); err != nil {
+					log.Fatalf("error: %v\n", err)
+				} else {
+					fromRecords(records)
+				}
+			})
+		} else {
+			if !contains(viper.SupportedExts, opts.From) {
+				log.Fatalf("error: unsupported input: %s\n", opts.From)
+			}
+			v.SetConfigType(opts.From)
+
+			loadData(func(r io.Reader) {
+				if opts.IsArray {
+					data, err := fromArray(r)
+					if err != nil {
+						log.Fatalf("error: %v\n", err)
+					}
+					v.Set(opts.WrapInKey, data)
+				} else {
+					if err := v.ReadConfig(r); err != nil {
+						log.Fatalf("error: %v\n", err)
+					}
+				}
+			})
+		}
+
+		obj := v.AllSettings()
+		result, err := dumper(obj)
+		if err != nil {
+			log.Fatalf("error: %v\n", err)
+		}
+
+		fmt.Println(string(result))
 	},
 }
 
@@ -82,6 +132,13 @@ func contains(arr []string, elem string) bool {
 		}
 	}
 	return false
+}
+
+func max(a, b int) int {
+	if a < b {
+		return b
+	}
+	return a
 }
 
 func tomlMarshaller(value interface{}) ([]byte, error) {
@@ -115,27 +172,34 @@ func fromArray(r io.Reader) ([]interface{}, error) {
 	return result, err
 }
 
-func processConfig() {
-	// configure input format
-	var absPath string
-	isGuess := opts.From == "" || opts.From == "guess"
-	if opts.IsArray {
-		opts.From = "json"
-	} else if isGuess {
-		if opts.Input != "" && !opts.Scan {
-			absPath, _ = filepath.Abs(opts.Input)
-			ext := filepath.Ext(absPath)
-			ext = strings.TrimPrefix(ext, ".")
-			opts.From = strings.ToLower(ext)
-		} else {
-			opts.From = "json"
+func fromRecords(records [][]string) {
+	// create fields
+	head := records[0]
+	fieldCount := len(opts.Fields)
+	elemCount := len(head)
+	fields := make([]string, 0)
+	if 0 < fieldCount {
+		fields = append(fields, opts.Fields...)
+	}
+	if fieldCount < elemCount {
+		for i := max(fieldCount-1, 0); i < elemCount; i++ {
+			fields = append(fields, fmt.Sprintf("field%d", i+1))
 		}
 	}
 
-	if !contains(viper.SupportedExts, opts.From) {
-		log.Fatalf("error: unsupported input: %s\n", opts.From)
+	data := make([]interface{}, len(records))
+	for i, record := range records {
+		m := make(map[string]string)
+		for j, val := range record {
+			m[fields[j]] = val
+		}
+		data[i] = m
 	}
-	v.SetConfigType(opts.From)
+
+	v.Set(opts.WrapInKey, data)
+}
+
+func loadData(callback func(io.Reader)) {
 
 	if opts.Scan {
 		// if scan is specified, parse stdin
@@ -147,17 +211,7 @@ func processConfig() {
 		stdin, _ := ioutil.ReadAll(os.Stdin)
 
 		reader := bytes.NewReader(stdin)
-		if opts.IsArray {
-			data, err := fromArray(reader)
-			if err != nil {
-				log.Fatalf("error: %v\n", err)
-			}
-			v.Set(opts.WrapInKey, data)
-		} else {
-			if err := v.ReadConfig(reader); err != nil {
-				log.Fatalf("error: %v\n", err)
-			}
-		}
+		callback(reader)
 	} else {
 		// else, check for input file
 		if opts.Input == "" {
@@ -181,32 +235,8 @@ func processConfig() {
 			log.Fatalf("error: %v\n", err)
 		}
 		reader := bytes.NewReader(content)
-
-		if opts.IsArray {
-			data, err := fromArray(reader)
-			if err != nil {
-				log.Fatalf("error: %v\n", err)
-			}
-			v.Set(opts.WrapInKey, data)
-		} else {
-			if err := v.ReadConfig(reader); err != nil {
-				log.Fatalf("error: %v\n", err)
-			}
-		}
+		callback(reader)
 	}
-
-	obj := v.AllSettings()
-
-	result, err := dumper(obj)
-	if err != nil {
-		log.Fatalf("error: %v\n", err)
-	}
-
-	fmt.Println(string(result))
-}
-
-func processCSV() {
-
 }
 
 func setup() {
@@ -226,6 +256,7 @@ func setup() {
 	flagSet.StringVarP(&opts.Input, "input", "i", "", "input file path")
 	flagSet.StringVarP(&opts.To, "to", "t", "toml", "output data format")
 	flagSet.StringVarP(&opts.WrapInKey, "wrap-in", "w", "data", "field name when decoding array")
+	flagSet.StringSliceVarP(&opts.Fields, "fields", "c", []string{}, "column names for CSV decode")
 	flagSet.IntVarP(&opts.Indent, "indent", "n", 4, "indents for json output")
 }
 
