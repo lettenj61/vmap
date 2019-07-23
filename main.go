@@ -13,13 +13,14 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/k0kubun/pp"
+	"github.com/iancoleman/strcase"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 )
 
 type options struct {
+	Case        string
 	EscapeHTML  bool
 	Fields      []string
 	From        string
@@ -29,16 +30,18 @@ type options struct {
 	ListFormats bool
 	Scan        bool
 	To          string
+	UseHeader   bool
 	WrapInKey   string
 }
 
 var opts options
 var v *viper.Viper
 var dumper func(value interface{}) ([]byte, error)
+var caseChanger func(key string) string
 
 var rootCmd *cobra.Command = &cobra.Command{
 	Use:     "vmap",
-	Version: "0.1.1",
+	Version: "0.1.2",
 	Short:   "convert one data format to another",
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -51,6 +54,7 @@ var rootCmd *cobra.Command = &cobra.Command{
 
 		opts.From = strings.TrimSpace(strings.ToLower(opts.From))
 		opts.To = strings.TrimSpace(strings.ToLower(opts.To))
+		opts.Case = strings.TrimSpace(strings.ToLower(opts.Case))
 
 		// set dumper
 		switch opts.To {
@@ -60,11 +64,29 @@ var rootCmd *cobra.Command = &cobra.Command{
 			dumper = yaml.Marshal
 		case "toml":
 			dumper = tomlMarshaller
-		case "go":
-			dumper = prettyGoMarshaller
 		default:
 			log.Printf("error: could not find marshaller for: %s\n", opts.To)
-			log.Fatalf("try one of: %v\n", []string{"go", "json", "yaml", "toml"})
+			log.Fatalf("try one of: %v\n", []string{"json", "yaml", "toml"})
+		}
+
+		// set case changer
+		switch opts.Case {
+		case "lower":
+			caseChanger = strings.ToLower
+		case "upper":
+			caseChanger = strings.ToUpper
+		case "kebab":
+			caseChanger = strcase.ToKebab
+		case "lowercamel":
+			caseChanger = strcase.ToLowerCamel
+		case "uppercamel":
+			caseChanger = strcase.ToCamel
+		case "snake":
+			caseChanger = strcase.ToSnake
+		default:
+			caseChanger = func(s string) string {
+				return s
+			}
 		}
 
 		// configure input format
@@ -160,11 +182,6 @@ func jsonMarshaller(value interface{}) ([]byte, error) {
 	return w.Bytes(), err
 }
 
-func prettyGoMarshaller(value interface{}) ([]byte, error) {
-	s := pp.Sprint(value)
-	return []byte(s), nil
-}
-
 func fromArray(r io.Reader) ([]interface{}, error) {
 	result := make([]interface{}, 0)
 	d := json.NewDecoder(r)
@@ -175,15 +192,20 @@ func fromArray(r io.Reader) ([]interface{}, error) {
 func fromRecords(records [][]string) {
 	// create fields
 	head := records[0]
-	fieldCount := len(opts.Fields)
-	elemCount := len(head)
-	fields := make([]string, 0)
-	if 0 < fieldCount {
-		fields = append(fields, opts.Fields...)
-	}
-	if fieldCount < elemCount {
-		for i := max(fieldCount-1, 0); i < elemCount; i++ {
-			fields = append(fields, fmt.Sprintf("field%d", i+1))
+	var fields []string
+	if opts.UseHeader {
+		fields = head
+	} else {
+		fieldCount := len(opts.Fields)
+		elemCount := len(head)
+		fields = make([]string, 0)
+		if 0 < fieldCount {
+			fields = append(fields, opts.Fields...)
+		}
+		if fieldCount < elemCount {
+			for i := max(fieldCount-1, 0); i < elemCount; i++ {
+				fields = append(fields, fmt.Sprintf("field%d", i+1))
+			}
 		}
 	}
 
@@ -191,7 +213,11 @@ func fromRecords(records [][]string) {
 	for i, record := range records {
 		m := make(map[string]string)
 		for j, val := range record {
-			m[fields[j]] = val
+			key := fields[j]
+			if opts.Case != "asis" {
+				key = caseChanger(strings.ToLower(fields[j]))
+			}
+			m[key] = val
 		}
 		data[i] = m
 	}
@@ -241,7 +267,6 @@ func loadData(callback func(io.Reader)) {
 
 func setup() {
 	log.SetPrefix("[vmap] ")
-	pp.ColoringEnabled = false
 
 	v = viper.New()
 	opts = options{}
@@ -249,9 +274,11 @@ func setup() {
 	flagSet := rootCmd.PersistentFlags()
 
 	flagSet.BoolVar(&opts.ListFormats, "list-formats", false, "list available input format")
+	flagSet.BoolVar(&opts.UseHeader, "use-header", false, "use 1st line as fields when decoding CSV")
 	flagSet.BoolVarP(&opts.IsArray, "array", "a", false, "decode as array not map. input forced to json")
 	flagSet.BoolVarP(&opts.EscapeHTML, "escape-html", "E", false, "escape html on json output")
 	flagSet.BoolVarP(&opts.Scan, "read-stdin", "S", false, "read from stdin")
+	flagSet.StringVarP(&opts.Case, "case", "C", "asis", "change case for fields when decoding CSV")
 	flagSet.StringVarP(&opts.From, "from", "f", "guess", "input data format")
 	flagSet.StringVarP(&opts.Input, "input", "i", "", "input file path")
 	flagSet.StringVarP(&opts.To, "to", "t", "toml", "output data format")
