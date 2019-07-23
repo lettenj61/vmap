@@ -82,7 +82,12 @@ var rootCmd = &cobra.Command{
 		case "uppercamel":
 			caseChanger = strcase.ToCamel
 		case "snake":
-			caseChanger = strcase.ToSnake
+			caseChanger = func(orig string) string {
+				tokens := strings.FieldsFunc(strcase.ToSnake(orig), func(r rune) bool {
+					return r == '_'
+				})
+				return strings.Join(filterBlank(tokens), "_")
+			}
 		default:
 			caseChanger = func(s string) string {
 				return s
@@ -161,6 +166,17 @@ func max(a, b int) int {
 		return b
 	}
 	return a
+}
+
+func filterBlank(tokens []string) []string {
+	out := make([]string, 0)
+	for _, tok := range tokens {
+		if strings.TrimSpace(tok) == "" {
+			continue
+		}
+		out = append(out, tok)
+	}
+	return out
 }
 
 func tomlMarshaller(value interface{}) ([]byte, error) {
