@@ -39,7 +39,7 @@ var v *viper.Viper
 var dumper func(value interface{}) ([]byte, error)
 var caseChanger func(key string) string
 
-var rootCmd *cobra.Command = &cobra.Command{
+var rootCmd = &cobra.Command{
 	Use:     "vmap",
 	Version: "0.1.2",
 	Short:   "convert one data format to another",
