@@ -76,18 +76,17 @@ var rootCmd = &cobra.Command{
 		case "upper":
 			caseChanger = strings.ToUpper
 		case "kebab":
-			caseChanger = strcase.ToKebab
+			caseChanger = wrapCaseChanger(strcase.ToKebab, '-')
+		case "upperkebab", "screamingkebab":
+			caseChanger = wrapCaseChanger(strcase.ToScreamingKebab, '-')
 		case "lowercamel":
 			caseChanger = strcase.ToLowerCamel
 		case "uppercamel":
 			caseChanger = strcase.ToCamel
 		case "snake":
-			caseChanger = func(orig string) string {
-				tokens := strings.FieldsFunc(strcase.ToSnake(orig), func(r rune) bool {
-					return r == '_'
-				})
-				return strings.Join(filterBlank(tokens), "_")
-			}
+			caseChanger = wrapCaseChanger(strcase.ToSnake, '_')
+		case "uppersnake", "screamingsnake":
+			caseChanger = wrapCaseChanger(strcase.ToScreamingSnake, '_')
 		default:
 			caseChanger = func(s string) string {
 				return s
@@ -143,6 +142,12 @@ var rootCmd = &cobra.Command{
 		}
 
 		obj := v.AllSettings()
+
+		// duplicated, consider move it somewhere
+		if opts.From != "csv" {
+			renameMapInPlace(obj)
+		}
+
 		result, err := dumper(obj)
 		if err != nil {
 			log.Fatalf("error: %v\n", err)
@@ -177,6 +182,38 @@ func filterBlank(tokens []string) []string {
 		out = append(out, tok)
 	}
 	return out
+}
+
+func wrapCaseChanger(cc func(string) string, sep rune) func(string) string {
+	return func(orig string) string {
+		tokens := strings.FieldsFunc(cc(orig), func(r rune) bool {
+			return r == sep
+		})
+		return strings.Join(filterBlank(tokens), string([]rune{sep}))
+	}
+}
+
+func renameMapInPlace(m map[string]interface{}) {
+	for key, v := range m {
+		newKey := caseChanger(key)
+
+		switch v.(type) {
+		case map[string]interface{}:
+			renameMapInPlace(v.(map[string]interface{}))
+		case []interface{}:
+			for _, vv := range v.([]interface{}) {
+				switch vv.(type) {
+				case map[string]interface{}:
+					renameMapInPlace(vv.(map[string]interface{}))
+				default:
+				}
+			}
+		default:
+		}
+
+		delete(m, key)
+		m[newKey] = v
+	}
 }
 
 func tomlMarshaller(value interface{}) ([]byte, error) {
@@ -294,7 +331,7 @@ func setup() {
 	flagSet.BoolVarP(&opts.IsArray, "array", "a", false, "decode as array not map. input forced to json")
 	flagSet.BoolVarP(&opts.EscapeHTML, "escape-html", "E", false, "escape html on json output")
 	flagSet.BoolVarP(&opts.Scan, "read-stdin", "S", false, "read from stdin")
-	flagSet.StringVarP(&opts.Case, "case", "C", "asis", "change case for fields when decoding CSV")
+	flagSet.StringVarP(&opts.Case, "case", "C", "asis", "change case for fields")
 	flagSet.StringVarP(&opts.From, "from", "f", "guess", "input data format")
 	flagSet.StringVarP(&opts.Input, "input", "i", "", "input file path")
 	flagSet.StringVarP(&opts.To, "to", "t", "toml", "output data format")
