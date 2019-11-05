@@ -41,7 +41,7 @@ var caseChanger func(key string) string
 
 var rootCmd = &cobra.Command{
 	Use:     "vmap",
-	Version: "0.1.2",
+	Version: "0.1.3",
 	Short:   "convert one data format to another",
 	Run: func(cmd *cobra.Command, args []string) {
 
