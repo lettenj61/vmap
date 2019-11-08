@@ -80,17 +80,22 @@ var rootCmd = &cobra.Command{
 		case "upperkebab", "screamingkebab":
 			caseChanger = wrapCaseChanger(strcase.ToScreamingKebab, '-')
 		case "lowercamel":
-			caseChanger = strcase.ToLowerCamel
+			caseChanger = func(s string) string {
+				return strcase.ToLowerCamel(strings.ToLower(s))
+			}
 		case "uppercamel":
 			caseChanger = strcase.ToCamel
 		case "snake":
 			caseChanger = wrapCaseChanger(strcase.ToSnake, '_')
 		case "uppersnake", "screamingsnake":
 			caseChanger = wrapCaseChanger(strcase.ToScreamingSnake, '_')
-		default:
+		case "asis":
 			caseChanger = func(s string) string {
 				return s
 			}
+		default:
+			supportedCases := []string{"asis", "lower", "upper", "kebab", "upperkebab", "lowercamel", "uppercamel", "snake", "uppersnake"}
+			log.Fatalf("unknown case: %s\ntry one of: %v\n", opts.Case, supportedCases)
 		}
 
 		// configure input format
