@@ -39,9 +39,11 @@ var v *viper.Viper
 var dumper func(value interface{}) ([]byte, error)
 var caseChanger func(key string) string
 
+const versionString string = "0.2.0"
+
 var rootCmd = &cobra.Command{
 	Use:     "vmap",
-	Version: "0.1.3",
+	Version: versionString,
 	Short:   "convert one data format to another",
 	Run: func(cmd *cobra.Command, args []string) {
 
